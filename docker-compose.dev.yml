@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: docker/Dockerfile.dev
+    ports:
+      - "3000:3000"
+      - "9229:9229"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/fasttrack?schema=public
+      - CARRIER_API_URL=http://mock-carrier:3001
+      - CARRIER_API_TIMEOUT=5000
+      - SYNC_CRON_SCHEDULE=*/1 * * * *
+      - SYNC_ENABLED=true
+      - RETRY_MAX_ATTEMPTS=3
+      - RETRY_BASE_DELAY=1000
+      - RETRY_MAX_DELAY=10000
+      - LOG_LEVEL=debug
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/prisma:/app/prisma
+    depends_on:
+      db:
+        condition: service_healthy
+      mock-carrier:
+        condition: service_started
+    networks:
+      - fasttrack-network
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=fasttrack
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    networks:
+      - fasttrack-network
+
+  mock-carrier:
+    image: node:22-alpine
+    working_dir: /data
+    command: sh -c "npm install -g json-server@0.17.4 && json-server --watch db.json --routes routes.json --port 3001 --host 0.0.0.0"
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./mock-carrier/db.json:/data/db.json
+      - ./mock-carrier/routes.json:/data/routes.json
+    networks:
+      - fasttrack-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    environment:
+      - VITE_API_URL=http://localhost:3000/api/v1
+    depends_on:
+      - api
+    networks:
+      - fasttrack-network
+
+volumes:
+  postgres_dev_data:
+
+networks:
+  fasttrack-network:
+    driver: bridge

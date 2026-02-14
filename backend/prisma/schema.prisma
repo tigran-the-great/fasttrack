@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Shipment {
+  id            String          @id @default(uuid()) @db.Uuid
+  orderId       String          @unique @db.VarChar(50)
+  customerName  String          @db.VarChar(255)
+  destination   String          @db.VarChar(500)
+  status        ShipmentStatus  @default(PENDING)
+  lastSyncedAt  DateTime?       @db.Timestamptz
+  carrierRef    String?         @db.VarChar(100)
+  version       Int             @default(0)
+  createdAt     DateTime        @default(now()) @db.Timestamptz
+  updatedAt     DateTime        @updatedAt @db.Timestamptz
+
+  @@index([status])
+  @@index([lastSyncedAt])
+  @@index([createdAt])
+  @@map("shipments")
+}
+
+enum ShipmentStatus {
+  PENDING
+  IN_TRANSIT
+  DELIVERED
+  FAILED
+
+  @@map("shipment_status")
+}
+
+model SyncLog {
+  id            String      @id @default(uuid()) @db.Uuid
+  shipmentId    String?     @db.Uuid
+  syncType      SyncType    @default(SCHEDULED)
+  status        SyncStatus
+  errorMessage  String?
+  duration      Int?
+  syncedAt      DateTime    @default(now()) @db.Timestamptz
+
+  @@index([shipmentId])
+  @@index([syncedAt])
+  @@map("sync_logs")
+}
+
+enum SyncType {
+  SCHEDULED
+  MANUAL
+
+  @@map("sync_type")
+}
+
+enum SyncStatus {
+  SUCCESS
+  FAILED
+  PARTIAL
+
+  @@map("sync_status")
+}
